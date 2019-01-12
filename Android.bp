@@ -1,0 +1,18 @@
+cc_defaults {
+    name: "android_test_common_defaults",
+    cflags: [
+    ],
+}
+
+cc_binary {
+    name: "android_test",
+    defaults: ["client_common_defaults"],
+    srcs: [ "main.cpp", "crypto_helper.cpp" ],
+    cflags: ["-Wno-missing-prototypes"],
+    shared_libs: [
+        "libcrypto",
+    ],
+    static_libs: [
+        "libgtest", "libgtest_main"
+    ]
+}
