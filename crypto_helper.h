@@ -6,6 +6,7 @@
 #include <openssl/err.h>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
+#include <openssl/rsa.h>
 #include <stdlib.h>
 
 #include "log.h"
@@ -42,5 +43,9 @@
 int AES256EncryptDecrypt(int mode, char *in, size_t in_len, char *key,
                          char *iv, char* tag, char *out, size_t *out_len);
 
+
+EVP_PKEY *GenerateRSAKey (int key_len_bits);
+int RSASign(char *in, size_t in_len, EVP_PKEY *key, char**sig, size_t *sig_len);
+int RSAVerify(char *in, size_t in_len, EVP_PKEY *key, char*sig, size_t sig_len);
 
 #endif // KEYMASTER_H

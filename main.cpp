@@ -3,7 +3,7 @@
 #include "crypto_helper.h"
 
 class Base : public ::testing::Test {
-    public:
+  public:
     Base() {}
     virtual ~Base() {}
     void SetUp() {}
@@ -11,6 +11,14 @@ class Base : public ::testing::Test {
     int GenerateRandomBytes(char *buf, size_t size) {
         return RAND_bytes((unsigned char*)buf, (int)size);
     }
+};
+
+class RsaTest : public Base {
+  public:
+    RsaTest() {}
+    virtual ~RsaTest() {}
+    void SetUp() {}
+    void TearDown() {}
 };
 
 TEST_F(Base, AES256GCMEncryptDecryptSuccess) {
@@ -110,6 +118,21 @@ TEST_F(Base, AES256GCMBrokenTag) {
     ASSERT_EQ(-1, AES256EncryptDecrypt(MODE_DECRYPT, ciphertext,
         ciphertext_len, key, iv, tag, decrypted_text, &decryptedtext_len))
             << "Message decryption should have failed";
+}
+
+TEST_F(Base, RSASignVerifySuccess) {
+    char plaintext[] = "What is the key to the life on Earth?";
+    char *signature = NULL;
+    size_t siglen;
+    EVP_PKEY *pkey = GenerateRSAKey(2048);
+
+    ASSERT_NE((evp_pkey_st *)NULL, pkey) << "Failed to generate rsa key";
+    ASSERT_EQ(0, RSASign(plaintext, strlen(plaintext), pkey, &signature, &siglen))
+            << "Failed to sign data";
+    ASSERT_EQ(0, RSAVerify(plaintext, strlen(plaintext), pkey, signature, siglen))
+            << "Failed to verify signature";
+
+    EVP_PKEY_free(pkey);
 }
 
 int main(int argc, char **argv) {
