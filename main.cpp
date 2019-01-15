@@ -127,12 +127,75 @@ TEST_F(Base, RSASignVerifySuccess) {
     EVP_PKEY *pkey = GenerateRSAKey(2048);
 
     ASSERT_NE((evp_pkey_st *)NULL, pkey) << "Failed to generate rsa key";
-    ASSERT_EQ(0, RSASign(plaintext, strlen(plaintext), pkey, &signature, &siglen))
-            << "Failed to sign data";
-    ASSERT_EQ(0, RSAVerify(plaintext, strlen(plaintext), pkey, signature, siglen))
-            << "Failed to verify signature";
+
+    ASSERT_EQ(0, RSASign(plaintext, strlen(plaintext), pkey,
+        &signature, &siglen)) << "Failed to sign data";
+
+    ASSERT_EQ(0, RSAVerify(plaintext, strlen(plaintext),
+        pkey, signature, siglen)) << "Failed to verify signature";
 
     EVP_PKEY_free(pkey);
+    free(signature);
+}
+
+TEST_F(Base, RSASignVerifyFakeKeyFails) {
+    char plaintext[] = "What is the key to the life on Earth?";
+    char *signature = NULL;
+    size_t siglen;
+    EVP_PKEY *pkey = GenerateRSAKey(2048);
+    EVP_PKEY *fake_pkey = GenerateRSAKey(2048);
+
+    ASSERT_NE((evp_pkey_st *)NULL, pkey) << "Failed to generate rsa key";
+
+    ASSERT_EQ(0, RSASign(plaintext, strlen(plaintext), pkey,
+        &signature, &siglen)) << "Failed to sign data";
+
+    ASSERT_NE(0, RSAVerify(plaintext, strlen(plaintext),
+        fake_pkey, signature, siglen)) << "Should have failed to verify signature";
+
+    EVP_PKEY_free(pkey);
+    EVP_PKEY_free(fake_pkey);
+    free(signature);
+}
+
+TEST_F(Base, RSASignVerifyChangedDataFails) {
+    char plaintext[] = "What is the key to the life on Earth?";
+    char *signature = NULL;
+    size_t siglen;
+    EVP_PKEY *pkey = GenerateRSAKey(2048);
+
+    ASSERT_NE((evp_pkey_st *)NULL, pkey) << "Failed to generate rsa key";
+
+    ASSERT_EQ(0, RSASign(plaintext, strlen(plaintext), pkey,
+        &signature, &siglen)) << "Failed to sign data";
+
+    plaintext[0] ^= 1;
+
+    ASSERT_NE(0, RSAVerify(plaintext, strlen(plaintext),
+        pkey, signature, siglen)) << "should have failed to verify signature";
+
+    EVP_PKEY_free(pkey);
+    free(signature);
+}
+
+TEST_F(Base, RSASignVerifyChangedSignatureFails) {
+    char plaintext[] = "What is the key to the life on Earth?";
+    char *signature = NULL;
+    size_t siglen;
+    EVP_PKEY *pkey = GenerateRSAKey(2048);
+
+    ASSERT_NE((evp_pkey_st *)NULL, pkey) << "Failed to generate rsa key";
+
+    ASSERT_EQ(0, RSASign(plaintext, strlen(plaintext), pkey,
+        &signature, &siglen)) << "Failed to sign data";
+
+    signature[0] ^= 1;
+
+    ASSERT_NE(0, RSAVerify(plaintext, strlen(plaintext),
+        pkey, signature, siglen)) << "should have failed to verify signature";
+
+    EVP_PKEY_free(pkey);
+    free(signature);
 }
 
 int main(int argc, char **argv) {
