@@ -7,6 +7,9 @@
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <openssl/rsa.h>
+#include <openssl/pem.h>
+#include <openssl/conf.h>
+#include <openssl/x509v3.h>
 #include <stdlib.h>
 
 #include "log.h"
@@ -47,5 +50,7 @@ int AES256EncryptDecrypt(int mode, char *in, size_t in_len, char *key,
 EVP_PKEY *GenerateRSAKey (int key_len_bits);
 int RSASign(char *in, size_t in_len, EVP_PKEY *key, char**sig, size_t *sig_len);
 int RSAVerify(char *in, size_t in_len, EVP_PKEY *key, char*sig, size_t sig_len);
+
+int MakeCertificate(X509 **x509p, EVP_PKEY *pk, int serial, int days);
 
 #endif // KEYMASTER_H

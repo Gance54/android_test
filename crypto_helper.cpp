@@ -1,9 +1,4 @@
 #include "crypto_helper.h"
-#include <openssl/conf.h>
-#include <openssl/evp.h>
-#include <openssl/err.h>
-#include <openssl/rand.h>
-#include <openssl/sha.h>
 
 int AES256EncryptDecrypt(int mode, char *in, size_t in_len, char *key,
                          char *iv, char* tag, char *out, size_t *out_len) {
@@ -208,4 +203,74 @@ out:
     return pkey;
 }
 
+static int add_ext(X509 *cert, int nid, char *value) {
+    X509_EXTENSION *ex = NULL;
+    ASN1_OCTET_STRING *str = ASN1_OCTET_STRING_new();
+    if (!str) {
+        LOGE("Failed to create asn1 string");
+        return -1;
+    }
+    ASN1_OCTET_STRING_set(str, (const unsigned char*)value, strlen(value));
+    X509_EXTENSION_create_by_NID(&ex, nid, 0, str);
+    X509_add_ext(cert,ex,-1);
+    X509_EXTENSION_free(ex);
+    return 0;
+}
+
+
+int MakeCertificate(X509 **x509p, EVP_PKEY *pk, int serial, int days) {
+    X509_NAME *name=NULL;
+    X509 *x = X509_new();
+    if (!x) {
+        LOGE("Failed to allocate memory");
+        goto err;
+    }
+
+    X509_set_version(x,2);
+    ASN1_INTEGER_set(X509_get_serialNumber(x),serial);
+    X509_gmtime_adj(X509_get_notBefore(x),0);
+    X509_gmtime_adj(X509_get_notAfter(x),(long)60*60*24*days);
+    X509_set_pubkey(x,pk);
+
+    name=X509_get_subject_name(x);
+
+    X509_NAME_add_entry_by_txt(name,"C",
+                MBSTRING_ASC, (const unsigned char*)"UA", -1, -1, 0);
+    X509_NAME_add_entry_by_txt(name,"CN",
+                MBSTRING_ASC, (const unsigned char*)"AndroidS ProCamp", -1, -1, 0);
+
+    /*
+     * Its self signed so set the issuer name to be the same as the
+     * subject.
+     */
+    X509_set_issuer_name(x,name);
+
+    /* Add various extensions: standard extensions */
+    add_ext(x, NID_basic_constraints, (char*)"critical,CA:TRUE");
+    add_ext(x, NID_key_usage, (char*)"critical,keyCertSign,cRLSign");
+
+    add_ext(x, NID_subject_key_identifier, (char*)"hash");
+
+    add_ext(x, NID_netscape_cert_type, (char*)"sslCA");
+
+    add_ext(x, NID_netscape_comment, (char*)"example comment extension");
+
+    {
+        int nid;
+        nid = OBJ_create("1.2.3.4", "TestAlias", "My Extension");
+        X509V3_EXT_add_alias(nid, NID_netscape_comment);
+        add_ext(x, nid, (char*)"Example comment");
+    }
+
+    if (!X509_sign(x,pk,EVP_sha256()))
+        goto err;
+
+    *x509p=x;
+    return 0 ;
+
+err:
+
+    X509_free(x);
+    return(-1);
+}
 

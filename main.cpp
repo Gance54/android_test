@@ -2,6 +2,9 @@
 #include "log.h"
 #include "crypto_helper.h"
 
+#define CERT_PATH "/data/local/tmp/cert.der"
+#define SIGNATURE_PATH "/data/local/tmp/signature.dat"
+
 class Base : public ::testing::Test {
   public:
     Base() {}
@@ -11,14 +14,6 @@ class Base : public ::testing::Test {
     int GenerateRandomBytes(char *buf, size_t size) {
         return RAND_bytes((unsigned char*)buf, (int)size);
     }
-};
-
-class RsaTest : public Base {
-  public:
-    RsaTest() {}
-    virtual ~RsaTest() {}
-    void SetUp() {}
-    void TearDown() {}
 };
 
 TEST_F(Base, AES256GCMEncryptDecryptSuccess) {
@@ -36,6 +31,8 @@ TEST_F(Base, AES256GCMEncryptDecryptSuccess) {
     ASSERT_EQ(0, AES256EncryptDecrypt(MODE_ENCRYPT, plaintext,
         strlen(plaintext), key, iv, tag, ciphertext, &ciphertext_len))
             << "Failed to encrypt message";
+
+    ASSERT_TRUE(ciphertext_len == strlen(plaintext));
 
     ASSERT_EQ(0, AES256EncryptDecrypt(MODE_DECRYPT, ciphertext,
         ciphertext_len, key, iv, tag, decrypted_text, &decryptedtext_len))
@@ -163,7 +160,6 @@ TEST_F(Base, RSASignVerifyChangedDataFails) {
     char *signature = NULL;
     size_t siglen;
     EVP_PKEY *pkey = GenerateRSAKey(2048);
-
     ASSERT_NE((evp_pkey_st *)NULL, pkey) << "Failed to generate rsa key";
 
     ASSERT_EQ(0, RSASign(plaintext, strlen(plaintext), pkey,
@@ -183,7 +179,6 @@ TEST_F(Base, RSASignVerifyChangedSignatureFails) {
     char *signature = NULL;
     size_t siglen;
     EVP_PKEY *pkey = GenerateRSAKey(2048);
-
     ASSERT_NE((evp_pkey_st *)NULL, pkey) << "Failed to generate rsa key";
 
     ASSERT_EQ(0, RSASign(plaintext, strlen(plaintext), pkey,
@@ -197,6 +192,46 @@ TEST_F(Base, RSASignVerifyChangedSignatureFails) {
     EVP_PKEY_free(pkey);
     free(signature);
 }
+
+TEST_F(Base, SignAndMakeCert) {
+    char plaintext[] = "What is the key to the life on Earth?";
+    int len;
+    char *signature = NULL;
+    size_t siglen;
+    unsigned char *cert_data = NULL;
+    X509 *cert = NULL;
+    FILE *pFile;
+    EVP_PKEY *pkey = GenerateRSAKey(2048);
+    ASSERT_NE((evp_pkey_st *)NULL, pkey) << "Failed to generate rsa key";
+    ASSERT_EQ(0, MakeCertificate(&cert, pkey, 1, 365));
+    len = i2d_X509(cert, NULL);
+
+    ASSERT_FALSE(0 > len) << "Failed to get cert length";
+    len = i2d_X509(cert, &cert_data);
+    ASSERT_FALSE(0 > len) << "Failed to serialize certificate";
+    pFile = fopen(CERT_PATH, "wb");
+    ASSERT_NE((FILE*)NULL, pFile) << "Failed to open a file";
+    ASSERT_EQ(fwrite(cert_data, 1, (size_t)len, pFile), (size_t)len)
+            << "Dailed to write certificate to a file";
+    fclose(pFile);
+
+    free(cert_data);
+    X509_free(cert);
+
+    ASSERT_EQ(0, RSASign(plaintext, strlen(plaintext), pkey,
+        &signature, &siglen)) << "Failed to sign data";
+
+    pFile = fopen(SIGNATURE_PATH, "wb");
+    ASSERT_NE((FILE*)NULL, pFile) << "Failed to open a file";
+    ASSERT_EQ(fwrite(signature, 1, siglen, pFile), siglen)
+            << "Failed to write signature to a file";
+    fclose(pFile);
+
+    EVP_PKEY_free(pkey);
+    free(signature);
+}
+
+
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
