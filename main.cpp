@@ -2,17 +2,134 @@
 #include "log.h"
 #include "crypto_helper.h"
 
+#include <android/hardware/keymaster/3.0/IKeymasterDevice.h>
+#include <android/hardware/keymaster/3.0/types.h>
+#include <keymaster/keymaster_configuration.h>
+
+#include "authorization_set.h"
+#include "key_param_output.h"
+
 #define CERT_PATH "/data/local/tmp/cert.der"
 #define SIGNATURE_PATH "/data/local/tmp/signature.dat"
 
-class Base : public ::testing::Test {
+using ::android::sp;
+
+namespace android {
+namespace hardware {
+namespace keymaster {
+namespace V3_0 {
+
+class HidlBuf : public hidl_vec<uint8_t> {
+    typedef hidl_vec<uint8_t> super;
+
   public:
+    HidlBuf() {}
+    HidlBuf(const super& other) : super(other) {}
+    HidlBuf(super&& other) : super(std::move(other)) {}
+    explicit HidlBuf(const std::string& other) : HidlBuf() { *this = other; }
+
+    HidlBuf& operator=(const super& other) {
+        super::operator=(other);
+        return *this;
+    }
+
+    HidlBuf& operator=(super&& other) {
+        super::operator=(std::move(other));
+        return *this;
+    }
+
+    HidlBuf& operator=(const std::string& other) {
+        resize(other.size());
+        for (size_t i = 0; i < other.size(); ++i) {
+            (*this)[i] = static_cast<uint8_t>(other[i]);
+        }
+        return *this;
+    }
+
+    std::string to_string() const { return std::string(reinterpret_cast<const char*>(data()), size()); }
+};
+
+class Base : public ::testing::Test {
+public:
     Base() {}
     virtual ~Base() {}
     void SetUp() {}
     void TearDown() {}
     int GenerateRandomBytes(char *buf, size_t size) {
         return RAND_bytes((unsigned char*)buf, (int)size);
+    }
+};
+
+class Derived : public Base {
+public:
+    sp<IKeymasterDevice> keymaster_;
+    bool isSecure_, supportsEc_, supportsSymmetric_, supportsAttestation_, supportsAllDigests_;
+    hidl_string name_;
+    hidl_string author_;
+    HidlBuf key_blob_;
+    KeyCharacteristics key_characteristics_;
+    Derived() {
+        if(!keymaster_)
+            keymaster_ =  IKeymasterDevice::getService();
+
+        if(!keymaster_) {
+            LOGE("Failed to get keymaster device");
+            return;
+        }
+
+        auto err = keymaster_->getHardwareFeatures([&](bool isSecure, bool supportsEc, bool supportsSymmetric,
+                                               bool supportsAttestation, bool supportsAllDigests,
+                                               const hidl_string& name, const hidl_string& author) {
+                isSecure_ = isSecure;
+                name_ = name;
+                author_ = author;
+                supportsEc_ = supportsEc;
+                supportsSymmetric_ = supportsSymmetric;
+                supportsAttestation_ = supportsAttestation;
+                supportsAllDigests_ = supportsAllDigests;
+                });
+
+        if(!err.isOk()) {
+            LOGI("Security level = %d", (int)isSecure_);
+            LOGI("name = %s", name_.c_str());
+            LOGI("author_ = %s", name_.c_str());
+        }
+        else
+            LOGE("Failed to get hardware features. error %s", err.description().c_str());
+
+    }
+
+    ~Derived() {
+        if(keymaster_)
+            keymaster_.clear();
+    }
+
+    ErrorCode GenerateKey(const AuthorizationSet& key_desc, HidlBuf* key_blob,
+                          KeyCharacteristics* key_characteristics) {
+        EXPECT_NE(key_blob, nullptr);
+        EXPECT_NE(key_characteristics, nullptr);
+        EXPECT_EQ(0U, key_blob->size());
+        ErrorCode error;
+        EXPECT_TRUE(keymaster_
+                        ->generateKey(key_desc.hidl_data(),
+                                      [&](ErrorCode hidl_error, const HidlBuf& hidl_key_blob,
+                                          const KeyCharacteristics& hidl_key_characteristics) {
+                                          error = hidl_error;
+                                          *key_blob = hidl_key_blob;
+                                          *key_characteristics = hidl_key_characteristics;
+                                      })
+                        .isOk());
+        // On error, blob & characteristics should be empty.
+        if (error != ErrorCode::OK) {
+            EXPECT_EQ(0U, key_blob->size());
+            EXPECT_EQ(0U, (key_characteristics->softwareEnforced.size() +
+                           key_characteristics->teeEnforced.size()));
+        }
+        return error;
+    }
+
+    ErrorCode GenerateKey(const AuthorizationSet& key_desc) {
+        return GenerateKey(key_desc, &key_blob_, &key_characteristics_);
     }
 };
 
@@ -231,9 +348,22 @@ TEST_F(Base, SignAndMakeCert) {
     free(signature);
 }
 
-
+TEST_F(Derived, KeymasterTest) {
+    for (auto key_size : {1024, 2048, 3072, 4096}) {
+        HidlBuf key_blob;
+        KeyCharacteristics key_characteristics;
+        ASSERT_EQ(ErrorCode::OK, GenerateKey(AuthorizationSetBuilder()
+                                                 .RsaSigningKey(key_size, 3)
+                                                 .Digest(Digest::NONE)
+                                                 .Padding(PaddingMode::NONE),
+                                                 &key_blob, &key_characteristics));
+    }
+}
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
+
+
+}}}}

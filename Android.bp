@@ -7,12 +7,21 @@ cc_defaults {
 cc_binary {
     name: "android_test",
     defaults: ["client_common_defaults"],
-    srcs: [ "main.cpp", "crypto_helper.cpp" ],
+    srcs: [ "main.cpp", "crypto_helper.cpp", "key_param_output.cpp", ],
     cflags: ["-Wno-missing-prototypes"],
     shared_libs: [
         "libcrypto",
+        "libbase",
+        // All the following are dependencies of any HAL definition library.
+        "libcutils",
+        "liblog",
+        "libhidlbase",
+        "libhidltransport",
+        "libhwbinder",
+        "libutils",
     ],
+
     static_libs: [
-        "libgtest", "libgtest_main"
+        "libgtest", "libgtest_main", "libsoftkeymasterdevice", "android.hardware.keymaster@3.0",
     ]
 }
