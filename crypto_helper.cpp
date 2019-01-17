@@ -168,8 +168,6 @@ int RSAVerify(char *in, size_t in_len, EVP_PKEY *key, char*sig, size_t sig_len) 
 
 out:
      EVP_PKEY_CTX_free(ctx);
-     if(ret)
-         free(sig);
 
      return ret;
 }

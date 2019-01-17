@@ -95,7 +95,7 @@ public:
             LOGI("author_ = %s", name_.c_str());
         }
         else
-            LOGE("Failed to get hardware features. error %s", err.description().c_str());
+            LOGW("Failed to get hardware features. Error %s", err.description().c_str());
 
     }
 
